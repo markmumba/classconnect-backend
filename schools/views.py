@@ -1,15 +1,19 @@
-from django.core.serializers import serialize
-from rest_framework import permissions, serializers, status, viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
 
+from rest_framework import  permissions,serializers, status, viewsets
+from rest_framework.decorators import action, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError
+from django.shortcuts import get_object_or_404
+
+from rest_framework.exceptions import PermissionDenied
 from users.serializers import UserListSerializer
 
 from .models import School, SubSchool
 from .permissions import IsSchoolAdminOrReadOnly
 from .serializers import (SchoolCreateSerializer, SchoolListSerializer,
                           SchoolSerializer, SubSchoolCreateSerializer,
-                          SubSchoolSerializer)
+                          SubSchoolSerializer, SubSchoolListSerializer)
 
 
 class SchoolViewSet(viewsets.ModelViewSet): 
@@ -33,7 +37,7 @@ class SchoolViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         if not self.request.user.is_superuser:
-            raise permissions.PermissionDenied("Only super admins can create schools")
+            raise PermissionDenied("Only super admins can create schools")
         serializer.save()
 
     @action(detail=True,methods=['get'])
@@ -53,7 +57,7 @@ class SchoolViewSet(viewsets.ModelViewSet):
     @action(detail=True,methods=['post'])
     def toggle_status(self,request,pk=None):
         if not request.user.is_superuser:
-            raise permissions.PermissionDenied("Only super admins can toggle school status")
+            raise PermissionDenied("Only super admins can toggle school status")
 
         school = self.get_object()
         school.is_active = not school.is_active
@@ -66,15 +70,17 @@ class SchoolViewSet(viewsets.ModelViewSet):
 
 
 
+
+
 class SubSchoolViewSet(viewsets.ModelViewSet):
     serializer_class = SubSchoolSerializer
     permission_classes = [IsSchoolAdminOrReadOnly]
 
     def get_queryset(self):
         if self.request.user.is_superuser:
-            return SubSchool.objects.all()
+            return SubSchool.objects.all().select_related('school')
         elif getattr(self.request.user, 'school',None):
-            return SubSchool.objects.filter(school=self.request.user.school,is_active=True)
+            return SubSchool.objects.filter(school=self.request.user.school,is_active=True).select_related('school')
         else:
             return SubSchool.objects.none()
 
@@ -85,10 +91,14 @@ class SubSchoolViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         if self.request.user.is_superuser:
-            if 'school' not in self.request.data:
-                raise serializers.ValidationError({'school':'School is required'})
-        else :
+            school_id = self.request.data.get('school')
+            if not school_id:
+                raise ValidationError({'school': 'School is required'})
+            school = get_object_or_404(School, id=school_id)
+            serializer.save(school=school)
+        else:
             serializer.save(school=self.request.user.school)
+
 
     @action(detail=True,methods=['get'])
     def users(self,request,pk=None):
@@ -100,25 +110,22 @@ class SubSchoolViewSet(viewsets.ModelViewSet):
 
 
 class PublicSchoolViewSet(viewsets.ReadOnlyModelViewSet):
-
     queryset = School.objects.filter(is_active=True)
     serializer_class = SchoolListSerializer
     permission_classes = [permissions.AllowAny]
 
-    @action(detail=False, methods=['get'])
-    def by_domain(self,request):
-        domain = request.query_params.get('domain')
-        if not domain:
-            return Response ({'error':'Domain parameter is required'},
-                             status=status.HTTP_400_BAD_REQUEST)
-        domain = domain.lstrip('@')
+class PublicSubSchoolViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = SubSchoolListSerializer
+    permission_classes = [permissions.AllowAny]
 
-        try :
-            school = School.objects.get(email_domain=domain,is_active=True)
-            serializer = SchoolListSerializer(school)
-            return Response(serializer.data)
-        except School.DoesNotExist:
-            return Response({'error':f'No school found for domain: {domain}'},status=status.HTTP_400_BAD_REQUEST)
+    def get_queryset(self):
+        school_id = self.request.query_params.get('school_id')
+        queryset = SubSchool.objects.filter(school_id=school_id, is_active=True).select_related('school')
+        if not school_id:
+            queryset=SubSchool.objects.none()
+
+        return queryset
+
 
 
 

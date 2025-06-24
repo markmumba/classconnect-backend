@@ -9,6 +9,7 @@ router = DefaultRouter()
 router.register(r'schools', views.SchoolViewSet,basename='schools')
 router.register(r'departments',views.SubSchoolViewSet,basename='departments')
 router.register(r'public/schools',views.PublicSchoolViewSet,basename='public-schools')
+router.register(r'public/departments',views.PublicSubSchoolViewSet,basename='public-departments')
 
 urlpatterns = [
     path('',include(router.urls))

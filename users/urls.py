@@ -6,7 +6,6 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'auth',views.AuthViewSet, basename='auth')
-router.register(r'sub_schools',views.SubSchoolViewSet,basename='sub_schools')
 router.register(r'users',views.UserViewSet,basename='users')
 
 urlpatterns = [

@@ -13,11 +13,11 @@ class CustomUserManager(BaseUserManager):
             raise ValueError("The email field must be set")
         email = self.normalize_email(email)
 
-        if 'school' not in extra_fields:
+        if not extra_fields.get('is_superuser', False) and 'school' not in extra_fields:
             domain = email.split('@')[1] if '@' in email else None
             if domain:
-                try :
-                    school = School.objects.get(email_domain=domain,is_active=True)
+                try:
+                    school = School.objects.get(email_domain=domain, is_active=True)
                     extra_fields['school'] = school
                 except School.DoesNotExist:
                     raise ValueError(f'No active school found for domain: {domain}')
@@ -30,7 +30,9 @@ class CustomUserManager(BaseUserManager):
     def create_superuser(self, email, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
-        extra_fields.setdefault('is_active',True)
+        extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('school', None)
+        extra_fields.setdefault('career_path', 'Platform Administrator')
 
         if extra_fields.get('is_staff') is not True:
             raise ValueError('Superuser must have is_staff=True.')
@@ -40,7 +42,7 @@ class CustomUserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 
-class CustomUser(AbstractBaseUser,PermissionsMixin):
+class CustomUser(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)
     first_name = models.CharField(max_length=30, blank=True)
     last_name = models.CharField(max_length=30, blank=True)
@@ -49,22 +51,23 @@ class CustomUser(AbstractBaseUser,PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
 
-    quote = models.CharField(max_length=255,blank=True)
+    student_id=models.CharField(max_length=15,blank=True)
+    quote = models.CharField(max_length=255, blank=True)
+    major =models.CharField(max_length=100,blank=True)
+    graduation_year =models.CharField(max_length=5,blank=True)
     picture = models.ImageField(upload_to="user_pictures/")
     career_path = models.CharField(max_length=100)
 
-    school = models.ForeignKey(School, on_delete=models.CASCADE,related_name='users')
-    sub_school = models.ForeignKey(SubSchool, on_delete=models.CASCADE,related_name='users')
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='users', null=True, blank=True)
+    sub_school = models.ForeignKey(SubSchool, on_delete=models.CASCADE, related_name='users', null=True, blank=True)
 
-
-    ROLE_CHOICES= [
-        ('student','student'),
-        ('teacher','teacher'),
-        ('admin','School Admin'),
-        ('super_admin','Super Admin')
+    ROLE_CHOICES = [
+        ('student', 'student'),
+        ('admin', 'School Admin'),
+        ('super_admin', 'Super Admin')
     ]
 
-    role = models.CharField(max_length=20 ,choices=ROLE_CHOICES,default='student')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='student')
 
     objects = CustomUserManager()
 
@@ -72,34 +75,41 @@ class CustomUser(AbstractBaseUser,PermissionsMixin):
     REQUIRED_FIELDS = []
 
     class Meta:
-        db_table='users'
+        db_table = 'users'
         indexes = [
-            models.Index(fields=['school','email']),
-            models.Index(fields=['school','role']),
+            models.Index(fields=['school', 'email']),
+            models.Index(fields=['school', 'role']),
         ]
 
     def __str__(self):
         return self.email
-    
+
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
 
     def short_name(self):
         return self.first_name
 
-    
     @property
     def is_school_admin(self):
-        return self.role in ['admin','super_admin']
+        if self.is_superuser:
+            return True
+        return self.role in ['admin', 'super_admin']
 
     def clean(self):
+        if self.is_superuser:
+            return
+        if not self.school:
+            raise ValidationError({'school':'Regular users must belong to a school'})
         if self.email and self.school:
             email_domain = self.email.split('@')[1] if '@' in self.email else None
             if email_domain != self.school.email_domain:
-                raise ValidationError ({
-                    'email':f'Email must belong to {self.school.email_domain} domain'
+                raise ValidationError({
+                    'email': f'Email must belong to {self.school.email_domain} domain'
                 })
 
-    def save(self,*args,**kwargs):
+    def save(self, *args, **kwargs):
+        if self.is_superuser and self.role !='super_admin':
+            self.role = 'super_admin'
         self.clean()
-        super().save(*args,**kwargs)
+        super().save(*args, **kwargs)

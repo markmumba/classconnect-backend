@@ -3,19 +3,71 @@ from rest_framework import serializers
 from .models import School, SubSchool
 
 
+
+class SubSchoolSerializer(serializers.ModelSerializer):
+
+    school_name=serializers.CharField(source='school.name',read_only=True)
+
+    class Meta:
+        model =SubSchool
+        fields =['id','name','description','school','school_name','is_active']
+
+
+class SubSchoolCreateSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model=SubSchool
+        fields =['name','description']
+
+    def validate(self, attrs):
+
+        request = self.context.get('request')
+        if not request or not request.user:
+            return attrs
+
+        if request.user.is_superuser:
+            school_id = request.data.get('school')
+            if not school_id:
+                raise serializers.ValidationError({'school': 'School is required'})
+            try:
+                school = School.objects.get(id=school_id)
+            except School.DoesNotExist:
+                raise serializers.ValidationError({'school': 'Invalid school'})
+        else:
+            school = request.user.school
+            if not school:
+                raise serializers.ValidationError({'error': 'User must belong to a school'})
+
+        name = attrs.get('name')
+        if name:
+            existing = SubSchool.objects.filter(school=school, name=name)
+            if existing.exists():
+                raise serializers.ValidationError({
+                    'name': f'Department "{name}" already exists in {school.name}'
+                })
+
+        return attrs
+
+
+class SubSchoolListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model= SubSchool
+        fields =['id','name']
+
+
 class SchoolSerializer(serializers.ModelSerializer):
 
     full_email_domain = serializers.ReadOnlyField()
     user_count = serializers.SerializerMethodField()
-    department_Count = serializers.SerializerMethodField()
+    department_count = serializers.SerializerMethodField()
+    departments=SubSchoolListSerializer(many=True,read_only=True)
 
     class Meta:
         model = School
         fields = [
             'id','name','email_domain','full_email_domain',
-            'location','phone','logo','is_active',
-            'subscription_type','max_users','user_count',
-            'department_count','created_at','update_at'
+            'location','phone','logo','is_active','user_count','departments',
+            'department_count','created_at','updated_at'
         ]
         read_only_fields=['created_at','updated_at']
 
@@ -44,36 +96,7 @@ class SchoolListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = School
-        fields = ['id', 'name', 'full_email_domain', 'location', 'is_active']
-
-class SubSchoolSerializer(serializers.ModelSerializer):
-
-    school_name=serializers.CharField(source='school.name',read_only=True)
-
-    class Meta:
-        model =SubSchool
-        fields =['id','name','description','school','school_name','is_active']
-
-    def validate(self,attrs):
-        school= attrs['school']
-        name =attrs.get('name')
-
-        if school and name:
-            existing = SubSchool.objects.filter(school=school,name=name)
-            if self.instance :
-                existing = existing.exclude(pk=self.instance.pk)
-
-        if existing.exists():
-            raise serializers.ValidationError({
-                'name':f'Department "{name}" already exists in {school.name}'
-            })
-        return attrs
-
-class SubSchoolCreateSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model=SubSchool 
-        fields =['name','description']
+        fields = ['id', 'name', 'full_email_domain']
 
 
 
