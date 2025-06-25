@@ -14,7 +14,6 @@ from .serializers import (
     UserLoginSerializer,
     UserProfileSerializer,
     UserRegistrationSerializer,
-    UserListSerializer,
 )
 
 
@@ -82,7 +81,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                         "first_name": user.first_name,
                         "last_name": user.last_name,
                         "role": user.role,
-                        "picture": user.picture,
+                        "picture": user.picture.url if user.picture else None,
                     },
                 },
                 status=status.HTTP_201_CREATED,
@@ -109,6 +108,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                         "first_name": user.first_name,
                         "last_name": user.last_name,
                         "role": user.role,
+                        "picture":user.picture.url if user.picture else None,
                         "school_id": user.school.id if user.school else None,
                         "graduation_year": (
                             user.graduation_year if user.graduation_year else None
