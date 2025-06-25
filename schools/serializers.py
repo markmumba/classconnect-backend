@@ -3,7 +3,6 @@ from rest_framework import serializers
 from .models import School, SubSchool
 
 
-
 class SubSchoolSerializer(serializers.ModelSerializer):
 
     school_name=serializers.CharField(source='school.name',read_only=True)
@@ -71,6 +70,7 @@ class SchoolSerializer(serializers.ModelSerializer):
         ]
         read_only_fields=['created_at','updated_at']
 
+    
     def get_user_count(self,obj):
         return obj.users.filter(is_active=True).count()
 
@@ -96,7 +96,7 @@ class SchoolListSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = School
-        fields = ['id', 'name', 'full_email_domain']
+        fields = ['id', 'name', 'full_email_domain','logo']
 
 
 
