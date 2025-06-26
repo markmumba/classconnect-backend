@@ -51,7 +51,7 @@ class SubSchoolCreateSerializer(serializers.ModelSerializer):
 class SubSchoolListSerializer(serializers.ModelSerializer):
     class Meta:
         model= SubSchool
-        fields =['id','name']
+        fields =['id','name','is_active','description']
 
 
 class SchoolSerializer(serializers.ModelSerializer):
